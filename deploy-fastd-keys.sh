@@ -45,5 +45,15 @@ for gw in $GATEWAYS; do
   gw_port_var="GATEWAY_PORT_$gw"
   gw_port="${!gw_port_var}"
   [ -z "$gw_port" ] && gw_port=22
-  ssh -o StrictHostKeyChecking=no -i "$SSH_KEYFILE" -p "$gw_port" "${gw_user}@${gw_host}" exit 1
+  connected=''
+  # Retry up to five times in case of network fuckup
+  for _ in `seq 5`; do
+    set +e
+    ssh -o StrictHostKeyChecking=no -i "$SSH_KEYFILE" -p "$gw_port" "${gw_user}@${gw_host}" exit 1
+    SSH_EXIT=$?
+    set -e
+    [ $SSH_EXIT -eq 0 ] && break
+  done
+  [ $SSH_EXIT -ne 0 ] && exit $SSH_EXIT
+  fi
 done
