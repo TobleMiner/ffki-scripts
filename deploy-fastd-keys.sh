@@ -31,6 +31,7 @@ if [ -z "$GATEWAY_DEPLOY_USER" ]; then
     error "GATEWAY_DEPLOY_USER environment variable must be set"
 fi
 
+mkdir -p "$(dirname "$SSH_KEYFILE")"
 echo "$SSH_KEY" > "$SSH_KEYFILE"
 
 for gw in $GATEWAYS; do
