@@ -44,5 +44,5 @@ for gw in $GATEWAYS; do
   gw_port_var="GATEWAY_PORT_$gw"
   gw_port="${!gw_port_var}"
   [ -z "$gw_port" ] && gw_port=22
-  ssh -i "$SSH_KEYFILE" -p "$gw_port" "${gw_user}@${gw_host}" exit 1
+  ssh -o StrictHostKeyChecking=no -i "$SSH_KEYFILE" -p "$gw_port" "${gw_user}@${gw_host}" exit 1
 done
