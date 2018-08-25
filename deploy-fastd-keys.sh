@@ -33,6 +33,7 @@ fi
 
 mkdir -p "$(dirname "$SSH_KEYFILE")"
 echo "$SSH_KEY" > "$SSH_KEYFILE"
+chmod 600 "$SSH_KEYFILE"
 
 for gw in $GATEWAYS; do
   gw_host_var="GATEWAY_HOST_$gw"
