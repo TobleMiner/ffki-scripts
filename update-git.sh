@@ -18,6 +18,7 @@ function update() {
     echo "Fast-Forward failed, killing it with fire"
     rm -rf "$GIT_DIR"
     git clone "$GIT_URL" -b "$GIT_BRANCH" "$GIT_DIR"
+    echo updated
   }
 }
 
