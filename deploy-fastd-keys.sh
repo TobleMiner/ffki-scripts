@@ -55,5 +55,4 @@ for gw in $GATEWAYS; do
     [ $SSH_EXIT -eq 0 ] && break
   done
   [ $SSH_EXIT -ne 0 ] && exit $SSH_EXIT
-  fi
 done
