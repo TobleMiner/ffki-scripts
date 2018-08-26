@@ -49,10 +49,11 @@ for gw in $GATEWAYS; do
   # Retry up to five times in case of network fuckup
   for _ in `seq 5`; do
     set +e
+    # using StrictHostKeyChecking=no is fine here since we don't reveal any data to the remote host
     ssh -o StrictHostKeyChecking=no -i "$SSH_KEYFILE" -p "$gw_port" "${gw_user}@${gw_host}" exit 1
     SSH_EXIT=$?
     set -e
     [ $SSH_EXIT -eq 0 ] && break
   done
-  [ $SSH_EXIT -ne 0 ] && exit $SSH_EXIT
+  [ $SSH_EXIT -eq 0 ] || exit $SSH_EXIT
 done
