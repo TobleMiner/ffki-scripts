@@ -14,7 +14,7 @@ fatal() {
 nw_ns_create() {
   netns="$1"
   [ -z "$netns" ] && fatal "usage: nw_ns_create <netns>"
-  ip netns list | grep -q "$netns" || {
+  ip netns list | egrep -q "${netns}[[:space:]]+" || {
     ip netns add "$netns"
   }
 }
@@ -22,6 +22,7 @@ nw_ns_create() {
 nw_ns_ensure_member() {
   netns="$1"
   member="$2"
+  [ -n "$netns" ] && [ -n "$member" ] || fatal "usage: nw_ns_ensure_member <netns> <member_if>"
   ip netns exec "$netns" ip link show dev "$member" &> /dev/null || {
     ip link set netns "$netns" dev "$member"
   }
@@ -46,29 +47,42 @@ nw_bridge_ensure_member() {
 }
 
 usage() {
-  fatal "$0 <mesh bridge> <script> [args]"
+  fatal "$0 <site code> <mesh bridge> <script> [args]"
 }
 
+teardown() {
+  code="$?"
+  brctl delif "$MESH_BRIDGE" "local-$MESH_BRIDGE" &> /dev/null || true
+  ip link set down "local-$MESH_BRIDGE" &> /dev/null || true
+  ip link del "local-$MESH_BRIDGE" &> /dev/null || true
+  ip netns del "$CLIENT_NETNS" &> /dev/null || true
+  return "$code"
+}
 
-MESH_BRIDGE="$1"
-SCRIPT="$2"
+SITE_CODE="$1"
+MESH_BRIDGE="$2"
+SCRIPT="$3"
 
-[ -n "$MESH_BRIDGE" ] && [ -n "$SCRIPT" ] || {
+[ -n "$SITE_CODE" ] && [ -n "$MESH_BRIDGE" ] && [ -n "$SCRIPT" ] || {
   usage
 }
 
-shift 2
+shift 3
 
-NETNS="client-$MESH_BRIDGE"
-
+export SITE_CODE
+export CLIENT_NETNS="client-$MESH_BRIDGE"
 export CLIENT_DEVICE="remote-$MESH_BRIDGE"
 
-nw_ns_create "$NETNS"
+trap teardown EXIT TERM INT
+
+# Setup netns
+nw_ns_create "$CLIENT_NETNS"
 nw_veth_pair_create "local-$MESH_BRIDGE" "$CLIENT_DEVICE"
 nw_bridge_ensure_member "$MESH_BRIDGE" "local-$MESH_BRIDGE"
-nw_ns_ensure_member "$NETNS" "$CLIENT_DEVICE"
+nw_ns_ensure_member "$CLIENT_NETNS" "$CLIENT_DEVICE"
 
 ip link set up "local-$MESH_BRIDGE"
-ip netns exec "$NETNS" ip link set up "$CLIENT_DEVICE"
+ip netns exec "$CLIENT_NETNS" ip link set up "$CLIENT_DEVICE"
 
-ip netns exec "$NETNS" "$SCRIPT" $@
+# Execute script
+"$SCRIPT" $@
