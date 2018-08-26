@@ -24,6 +24,9 @@ ENVVARS=(SITE_CODE CLIENT_NETNS CLIENT_DEVICE)
 
 for var in "${ENVVARS[@]}"; do
   [ -z "${!var}" ] && fatal 1 "Envvar $var must be set"
+  # Environment variables are not substituted in heredocs
+  # Redeclare relevant environment variables as local variables
+  declare -x "$var"="${!var}"
 done
 
 CHECKS4=()
@@ -44,68 +47,74 @@ while getopts '4:6:f:' arg; do
   esac
 done
 
+echo "init done"
+
 teardown_ipv4() {
-netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
+echo "teardown ipv4"
+ip netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
+  set -x
+
   set -e -o pipefail
 
   fatal() {
-    ( >&2 echo $@ )
+    ( >&2 echo \$@ )
     exit 1
   }
 
   if_ipv4_cidr() {
-    cidrs="$(ip -4 addr show dev "$1" | egrep -o '((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/[0-9]{1,2}')"
-    available=$?
+    cidrs="\$(ip -4 addr show dev "\$1" | egrep -o '((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/[0-9]{1,2}')"
+    available="\$?"
     echo "$cidrs" | head -n1
-    return $available
+    return "\$available"
   }
 
   ipv4_default_route() {
-    routes="$(ip -4 route show to match 0.0.0.0/0)"
-    available=$?
-    echo "$routes" | head -n1
-    return $available
+    routes="\$(ip -4 route show to match 0.0.0.0/0 | egrep 'default|0\.0\.0\.0')"
+    available="\$?"
+    echo "\$routes" | head -n1
+    return "\$available"
   }
 
   # Exit any existing dhcpcd instance on our interface
   dhcpcd -k "$CLIENT_DEVICE" &> /dev/null || true
   # Remove all existing ipv4 addresses from our interface
   while if_ipv4_cidr "$CLIENT_DEVICE" &> /dev/null; do
-    cidr="$(if_ipv4_cidr "$CLIENT_DEVICE")"
-    [ -z "$cidr" ] && fatal "inet tag without interface"
-    ip addr del "$cidr" dev "$CLIENT_DEVICE"
+    cidr="\$(if_ipv4_cidr "$CLIENT_DEVICE")"
+    ip addr del "\$cidr" dev "$CLIENT_DEVICE"
   done
   # Remove all default routes
   while ipv4_default_route &> /dev/null; do
-    ip route del $(ipv4_default_route)
+    ip route del \$(ipv4_default_route)
   done
 EOF
 }
 
 setup_ipv4() {
-netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
+echo "setup ipv4"
+teardown_ipv4
+ip netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
+  echo "$CLIENT_DEVICE"
   set -e -o pipefail
 
   fatal() {
-    ( >&2 echo $@ )
+    ( >&2 echo \$@ )
     exit 1
   }
 
   if_ipv4_cidr() {
-    cidrs="$(ip -4 addr show dev "$1" | egrep -o '((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/[0-9]{1,2}')"
-    available=$?
+    cidrs="\$(ip -4 addr show dev "\$1" | egrep -o '((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/[0-9]{1,2}')"
+    available="\$?"
     echo "$cidrs" | head -n1
-    return $available
+    return "\$available"
   }
 
   ipv4_default_route() {
-    routes="$(ip -4 route show to match 0.0.0.0/0)"
-    available=$?
-    echo "$routes" | head -n1
-    return $available
+    routes="\$(ip -4 route show to match 0.0.0.0/0 | egrep 'default|0\.0\.0\.0')"
+    available="\$?"
+    echo "\$routes" | head -n1
+    return "\$available"
   }
 
-  teardown_ipv4
 
   # Create a new dhcpcd instance on the client device
   dhcpcd --nohook resolv.conf "$CLIENT_DEVICE" &> /dev/null
@@ -118,7 +127,7 @@ netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
       break
     }
   done
-  if [ "$got_lease" != yes ]; then
+  if [ "\$got_lease" != yes ]; then
     fatal "Failed to obtain ipv4 lease"
   fi
   # Wait for ipv4 default route
@@ -130,7 +139,7 @@ netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
     }
     sleep 1
   done
-  if [ "$got_ipv4_default_route" != yes ]; then
+  if [ "\$got_ipv4_default_route" != yes ]; then
     fatal "Failed to obtain ipv4 default route"
   fi
 EOF
@@ -138,19 +147,22 @@ EOF
 
 # Prepare ipv6
 setup_ipv6() {
-netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
+echo "setup ipv6"
+ip netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
+  echo "$CLIENT_DEVICE"
+
   set -e -o pipefail
 
   fatal() {
-    ( >&2 echo $@ )
+    ( >&2 echo \$@ )
     exit 1
   }
 
   ipv6_default_route() {
-    routes="$(ip -6 route show to match ::/0)"
-    available=$?
-    echo "$routes" | head -n1
-    return $available
+    routes="\$(ip -6 route show to match ::/0)"
+    available=\$?
+    echo "\$routes" | head -n1
+    return \$available
   }
 
   # Wait for ipv6 default route
@@ -162,7 +174,7 @@ netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
     }
     sleep 1
   done
-  if [ "$got_ipv6_default_route" != yes ]; then
+  if [ "\$got_ipv6_default_route" != yes ]; then
     fatal "Failed to obtain ipv6 default route"
   fi
 EOF
@@ -170,6 +182,7 @@ EOF
 
 fail() {
   code="$?"
+  echo "TRAP HANDLER"
   trap teardown_ipv4 EXIT INT TERM
   for script in "${FAILS[@]}"; do
     "$script" "$1"

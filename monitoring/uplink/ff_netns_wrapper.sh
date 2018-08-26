@@ -14,7 +14,7 @@ fatal() {
 nw_ns_create() {
   netns="$1"
   [ -z "$netns" ] && fatal "usage: nw_ns_create <netns>"
-  ip netns list | grep -q "$netns" || {
+  ip netns list | egrep -q "${netns}[[:space:]]+" || {
     ip netns add "$netns"
   }
 }
@@ -22,6 +22,7 @@ nw_ns_create() {
 nw_ns_ensure_member() {
   netns="$1"
   member="$2"
+  [ -n "$netns" ] && [ -n "$member" ] || fatal "usage: nw_ns_ensure_member <netns> <member_if>"
   ip netns exec "$netns" ip link show dev "$member" &> /dev/null || {
     ip link set netns "$netns" dev "$member"
   }
@@ -46,7 +47,7 @@ nw_bridge_ensure_member() {
 }
 
 usage() {
-  fatal "$0 <mesh bridge> <script> [args]"
+  fatal "$0 <site code> <mesh bridge> <script> [args]"
 }
 
 teardown() {
