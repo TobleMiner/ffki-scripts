@@ -1,0 +1,1 @@
+../../check_templates/curl4.sh

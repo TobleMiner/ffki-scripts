@@ -1,0 +1,1 @@
+../../check_templates/curl6.sh
