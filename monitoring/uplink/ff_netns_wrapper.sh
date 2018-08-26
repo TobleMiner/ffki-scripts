@@ -73,6 +73,8 @@ export SITE_CODE
 export CLIENT_NETNS="client-$MESH_BRIDGE"
 export CLIENT_DEVICE="remote-$MESH_BRIDGE"
 
+trap teardown EXIT TERM INT
+
 # Setup netns
 nw_ns_create "$CLIENT_NETNS"
 nw_veth_pair_create "local-$MESH_BRIDGE" "$CLIENT_DEVICE"
