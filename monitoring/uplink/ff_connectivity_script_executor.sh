@@ -6,7 +6,7 @@
 
 # Checks must use special error codes to signal why the exited:
 #   0: No error. Connection quality in range from 0-100 in last output line
-#   1: PEBCAC. Unspecific not network-related error. Write stdout+stderr to log
+#   1: OSI layer 8 error. Unspecific not network-related error. Write stdout+stderr to log
 #   2: Network error. Assume connection quality 0
 #   3: Unexpected network error. Assume connection quality 0 and write stdout+stderr to log
 
@@ -21,11 +21,19 @@ IPV6_ROUTE_TIMEOUT=30
 IPV4_TRIES=3
 IPV6_TRIES=3
 
+error() {
+  ( >&2 echo $@ )
+}
+
 fatal() {
   code="$1"
-  shift 1
-  ( >&2 echo $@ )
+  shift
+  error $@
   exit "$code"
+}
+
+usage() {
+  fatal 1 "$0 [-4 SCRIPT ...] [-6 SCRIPT ...] [-f SCRIPT ...]"
 }
 
 ENVVARS=(SITE_CODE CLIENT_NETNS CLIENT_DEVICE)
@@ -37,22 +45,39 @@ for var in "${ENVVARS[@]}"; do
   declare -x "$var"="${!var}"
 done
 
-CHECKS4=()
-CHECKS6=()
-FAILS=()
+declare -A SCRIPTS
 
-while getopts '4:6:f:' arg; do
-  case "$arg" in
-    4)
-      CHECKS4+=("$OPTARG")
-      ;;
-    6)
-      CHECKS6+=("$OPTARG")
-      ;;
-    f)
-      FAILS+=("$OPTARG")
-      ;;
-  esac
+INDEX[4]=0
+INDEX[6]=0
+INDEX[f]=0
+
+current_key=''
+while [ $# -gt 0 ]; do
+  unset OPTIND
+  while getopts '46f' arg; do
+    current_key="$arg"
+  done
+  [[ -v OPTIND ]] && shift $((OPTIND - 1))
+  [ $# -eq 0 ] && break
+  [ -n "$current_key" ] || usage
+  SCRIPTS["${current_key}_${INDEX["$current_key"]}"]="$1"
+  INDEX["$current_key"]="$((${INDEX["$current_key"]} + 1))"
+  shift || true
+done
+
+CHECKS4=()
+for i in `seq 0 $((${INDEX[4]} - 1))`; do
+  CHECKS4+=("${SCRIPTS[4_$i]}")
+done
+
+CHECKS6=()
+for i in `seq 0 $((${INDEX[6]} - 1))`; do
+  CHECKS6+=("${SCRIPTS[6_$i]}")
+done
+
+FAILS=()
+for i in `seq 0 $((${INDEX[f]} - 1))`; do
+  FAILS+=("${SCRIPTS[f_$i]}")
 done
 
 echo "init done"
@@ -226,18 +251,34 @@ if [[ "$ipv6_ok" != yes ]]; then
 fi
 
 # checks
-v4_cnt=${#CHECKS4[@]}
-v4_ok=0
-for script in "${CHECKS4[@]}"; do
-  ip netns exec "$CLIENT_NETNS" "$script" && v4_ok=$((v4_ok + 1))
+for v in 4 6; do
+  declare -n arr="CHECKS${v}"
+  quality_max=$((${#arr[@]} * 100))
+  quality_sum=0
+  for script in "${arr[@]}"; do
+    set +e
+    check_output="$(ip netns exec "$CLIENT_NETNS" "$script" 2>&1)"
+    check_exit="$?"
+    set -e
+    case "$check_exit" in
+      0)
+        score="$(echo "$check_output" | tail -n1 | egrep -o '[0-9]+')"
+        quality_sum="$((quality_sum + score))"
+        ;;
+      1)
+        fatal 1 "Check '$script' failed: $check_output"
+        ;;
+      2)
+         # Assume score of zero
+        ;;
+      3)
+        error "Check '$script' failed: $check_output"
+        ;;
+      *)
+        error "Check '$script' returned unexpected exit code '$check_exit': $check_output"
+        ;;
+    esac
+  done
+
+  echo "IPv${v}: Quality $quality_sum/$quality_max"
 done
-
-echo "IPv4: $v4_ok of $v4_cnt checks passed"
-
-v6_cnt=${#CHECKS6[@]}
-v6_ok=0
-for script in "${CHECKS6[@]}"; do
-  ip netns exec "$CLIENT_NETNS" "$script" && v6_ok=$((v6_ok + 1))
-done
-
-echo "IPv6: $v4_ok of $v4_cnt checks passed"
