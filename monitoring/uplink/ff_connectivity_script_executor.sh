@@ -10,8 +10,6 @@
 #   2: Network error. Assume connection quality 0
 #   3: Unexpected network error. Assume connection quality 0 and write stdout+stderr to log
 
-set -x
-
 set -e -o pipefail
 
 DHCP_TIMEOUT=10
@@ -87,13 +85,8 @@ for i in `seq 0 $((${INDEX[g]} - 1))`; do
   GOODS+=("${SCRIPTS[g_$i]}")
 done
 
-echo "init done"
-
 teardown_ipv4() {
-echo "teardown ipv4"
 ip netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
-  set -x
-
   set -e -o pipefail
 
   fatal() {
@@ -130,11 +123,8 @@ EOF
 }
 
 setup_ipv4() {
-echo "setup ipv4"
 teardown_ipv4
 ip netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
-  set -x
-
   set -e -o pipefail
 
   fatal() {
@@ -189,9 +179,7 @@ EOF
 
 # Prepare ipv6
 setup_ipv6() {
-echo "setup ipv6"
 ip netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
-  set -x
   set -e -o pipefail
 
   fatal() {
@@ -230,7 +218,6 @@ soft_fail() {
 
 fail() {
   code="$?"
-  echo "TRAP HANDLER"
   trap 'code=$?; teardown_ipv4 || true; exit $?' EXIT INT TERM
   soft_fail "$1"
   exit "$code"
