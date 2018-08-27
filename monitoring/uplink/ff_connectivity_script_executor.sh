@@ -46,15 +46,17 @@ for var in "${ENVVARS[@]}"; do
 done
 
 declare -A SCRIPTS
+declare -A INDEX
 
 INDEX[4]=0
 INDEX[6]=0
 INDEX[f]=0
+INDEX[g]=0
 
 current_key=''
 while [ $# -gt 0 ]; do
   unset OPTIND
-  while getopts '46f' arg; do
+  while getopts '46fg' arg; do
     current_key="$arg"
   done
   [[ -v OPTIND ]] && shift $((OPTIND - 1))
@@ -78,6 +80,11 @@ done
 FAILS=()
 for i in `seq 0 $((${INDEX[f]} - 1))`; do
   FAILS+=("${SCRIPTS[f_$i]}")
+done
+
+GOODS=()
+for i in `seq 0 $((${INDEX[g]} - 1))`; do
+  GOODS+=("${SCRIPTS[g_$i]}")
 done
 
 echo "init done"
@@ -215,13 +222,17 @@ ip netns exec "$CLIENT_NETNS" "$SHELL" <<EOF
 EOF
 }
 
+soft_fail() {
+  for script in "${FAILS[@]}"; do
+    "$script" "$1"
+  done
+}
+
 fail() {
   code="$?"
   echo "TRAP HANDLER"
   trap 'code=$?; teardown_ipv4 || true; exit $?' EXIT INT TERM
-  for script in "${FAILS[@]}"; do
-    "$script" "$1"
-  done
+  soft_fail "$1"
   exit "$code"
 }
 
@@ -281,4 +292,14 @@ for v in 4 6; do
   done
 
   echo "IPv${v}: Quality $quality_sum/$quality_max"
+
+  if [ "$quality_sum" -lt "$((quality_max / 2))" ]; then
+    soft_fail "ipv$v"
+  fi
+
+  if [ "$quality_sum" -gt "$((quality_max * 2 / 3))" ]; then
+    for script in "${GOODS[@]}"; do
+      "$script" "ipv$v"
+    done
+  fi
 done

@@ -51,8 +51,7 @@ for line in lines:
     print(int(rx * 100 / tx))
     sys.exit(0)
 
-  except Exception as ex:
-    print(ex)
+  except Exception:
     pass
 
 fatal(1, "Failed to parse output of ping: ", stdout)
