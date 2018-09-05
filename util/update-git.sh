@@ -12,8 +12,22 @@ if [ -z "$GIT_URL" ] || [ -z "$GIT_BRANCH" ] || [ -z "$GIT_DIR" ]; then
 fi
 
 function update() {
-  # Try ff first
-  git -C "$GIT_DIR" fetch --all && git -C "$GIT_DIR" checkout "$GIT_BRANCH" && git -C "$GIT_DIR" pull --ff-only || {
+  git -C "$GIT_DIR" status &> /dev/null && {
+    # Ensure remote is set up
+    local remote=''
+    git -C "$GIT_DIR" remote | while read remote; do
+      if [[ "$(git -C "$GIT_DIR" remote get-url "$remote")" == "$GIT_URL" ]]; then
+        break
+      fi
+      unset remote
+    done
+    if [[ -z "$remote" ]]; then
+      remote="$(echo "${GIT_URL}§${GIT_BRANCH}§${GIT_DIR}" | md5sum | egrep -o '[a-fA-F0-9]{32}')"
+      git -C "$GIT_DIR" remote add "$remote" "$GIT_URL"
+    fi
+    # Try ff first
+  } && \
+  git -C "$GIT_DIR" fetch --all && git -C "$GIT_DIR" checkout "$GIT_BRANCH" && git -C "$GIT_DIR" pull "$remote" "$GIT_BRANCH" --ff-only || {
     # Kill it with fire
     echo "Fast-Forward failed, killing it with fire"
     rm -rf "$GIT_DIR"
