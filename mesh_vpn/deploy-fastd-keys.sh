@@ -55,5 +55,10 @@ for gw in $GATEWAYS; do
     set -e
     [ $SSH_EXIT -eq 0 ] && break
   done
-  [ $SSH_EXIT -eq 0 ] || exit $SSH_EXIT
+  [ $SSH_EXIT -eq 0 ] || (
+    echo "Gateway $gw failed with exit code $SSH_EXIT"
+    FINAL_EXIT=$SSH_EXIT
+  )
 done
+
+[ $FINAL_EXIT -eq 0 ] || exit $SSH_EXIT
